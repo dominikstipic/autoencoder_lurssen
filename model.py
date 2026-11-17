@@ -30,15 +30,14 @@ class RoomGenModel(nn.Module):
         return output
 
 
-dataset = RPlanDataset()
-
-model = RoomGenModel()
-
-img, house_mask, sizes, neighboorhood = dataset[1]
-print(f"img features: {img.shape}")
-print(f"house features: {house_mask.shape}")
-print(f"sizes features: {sizes.shape}")
-print(f"neighboorhood features: {neighboorhood.shape}")
-out = model(house_mask.unsqueeze(0), sizes, neighboorhood)
-print(f"out features: {out.shape}")
+if __name__ == "__main__":
+    dataset = RPlanDataset()
+    model = RoomGenModel()
+    img, house_mask, sizes, neighboorhood = dataset[1]
+    print(f"img features: {img.shape}")
+    print(f"house features: {house_mask.shape}")
+    print(f"sizes features: {sizes.shape}")
+    print(f"neighboorhood features: {neighboorhood.shape}")
+    out = model(house_mask.unsqueeze(0), sizes, neighboorhood)
+    print(f"out features: {out.shape}")
 
