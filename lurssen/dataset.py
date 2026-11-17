@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 from datasets import load_dataset
 import cv2
 import matplotlib.pyplot as plt
+import torch
 
 class RPlanDataset(Dataset):
     def __init__(self, split="train", return_graph=False, hf_name="metindeder/rplan-floorplan-edited"):
@@ -96,29 +97,31 @@ class RPlanDataset(Dataset):
     def __getitem__(self, idx):
         pil_img = self.ds[idx]["image"]
         house_mask = self._extract_house_mask(pil_img)
+        house_mask = torch.tensor(house_mask, dtype=torch.float)
+        house_mask = house_mask.unsqueeze(0)
         img = np.array(pil_img)
+        img = torch.tensor(img)
 
         adj, room_ids, room_labels, house = self._door_adjacency(pil_img, return_all=True)
         areas = self._room_areas(room_labels, room_ids, house)     # % relative to the whole footprint
         sizes = areas["percent"] / 100
+        sizes = sizes.reshape(len(sizes), 1)
         neighboorhood = self._from_adj_to_neighboorhood(adj)  
-        return img, house_mask, sizes, neighboorhood
+        neighboorhood = torch.tensor(neighboorhood, dtype=torch.long).T.contiguous()        
+        sizes = torch.tensor(sizes, dtype=torch.float)        
+        return img.permute(2,0,1), house_mask, sizes, neighboorhood
 
 
 if __name__ == "__main__":
     img, mask, sizes, neighboorhood = RPlanDataset()[-5]
+    print(img.shape)
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].imshow(img)
-    ax[0].axis("off")
+    # fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    # ax[0].imshow(img)
+    # ax[0].axis("off")
 
-    ax[1].imshow(mask)
-    ax[1].axis("off")
+    # ax[1].imshow(mask)
+    # ax[1].axis("off")
 
-    plt.tight_layout()
-    plt.show()
-
-    for ns in neighboorhood:
-        print(ns)
-
-    print(sizes)
+    # plt.tight_layout()
+    # plt.show()
