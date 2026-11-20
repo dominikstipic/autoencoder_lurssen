@@ -7,17 +7,16 @@ from lurssen.cross_attention import ImageGraphFusion
 import torch.nn as nn
 import torch
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 
-class RoomGenModel(nn.Module):
+class RoomGenEncoder(nn.Module):
     
     def __init__(self):
         super().__init__()
         self.gcn_model = RoomGraphEncoder(input_dim=1, hidden_dim=64, output_dim=128)
         self.encoder = ShipGeometryEncoder(latent_dim=512)
         self.fusion = ImageGraphFusion()
-
-# [1, 512, 8, 8]
 
     def forward(self, outershell_mask, node_features, edge_features):
         graph = Data(
@@ -32,12 +31,26 @@ class RoomGenModel(nn.Module):
 
 if __name__ == "__main__":
     dataset = RPlanDataset()
-    model = RoomGenModel()
-    img, house_mask, sizes, neighboorhood = dataset[1]
+    encoder = RoomGenEncoder()
+    img, house_mask, room_sizes, neighboorhood_graph = dataset[1]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].imshow(img.permute(1,2,0), cmap="gray")
+    axes[0].set_title("Original Image")
+    axes[0].axis("off")
+
+    axes[1].imshow(house_mask.squeeze(), cmap="gray")
+    axes[1].set_title("House Mask")
+    axes[1].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+    print(room_sizes)
+    print(neighboorhood_graph)
     print(f"img features: {img.shape}")
     print(f"house features: {house_mask.shape}")
-    print(f"sizes features: {sizes.shape}")
-    print(f"neighboorhood features: {neighboorhood.shape}")
-    out = model(house_mask.unsqueeze(0), sizes, neighboorhood)
-    print(f"out features: {out.shape}")
+    print(f"sizes features: {room_sizes.shape}")
+    print(f"neighboorhood features: {neighboorhood_graph.shape}")
+    cond = encoder(house_mask.unsqueeze(0), room_sizes, neighboorhood_graph)
+    print(f"out features: {cond.shape}")
 

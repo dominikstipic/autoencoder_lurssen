@@ -3,11 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-
-# ---------------------------------------
-# Time Embedding
-# ---------------------------------------
-
 class SinusoidalTimeEmbedding(nn.Module):
 
     def __init__(self, dim):
@@ -33,11 +28,6 @@ class SinusoidalTimeEmbedding(nn.Module):
             [emb.sin(), emb.cos()],
             dim=-1
         )
-
-
-# ---------------------------------------
-# Residual Block
-# ---------------------------------------
 
 class ResBlock(nn.Module):
 
@@ -89,11 +79,6 @@ class ResBlock(nn.Module):
         h = self.conv2(h)
 
         return h + self.residual(x)
-
-
-# ---------------------------------------
-# Conditional U-Net
-# ---------------------------------------
 
 class ConditionalUNet(nn.Module):
 
@@ -269,110 +254,3 @@ class ConditionalUNet(nn.Module):
 
         return self.output(x)
 
-
-class ConditionalFlowMatching:
-
-    def __init__(self, model, device="cuda"):
-
-        self.model = model
-        self.device = device
-
-    def loss(self, x1, condition):
-
-        batch_size = x1.shape[0]
-
-        # Gaussian noise
-        x0 = torch.randn_like(x1)
-
-        # Random time
-        t = torch.rand(
-            batch_size,
-            device=self.device
-        )
-
-        # Reshape time
-        t_view = t.view(
-            batch_size, 1, 1, 1
-        )
-
-        # Linear interpolation
-        xt = (1 - t_view) * x0 + t_view * x1
-
-        # Target velocity
-        target_velocity = x1 - x0
-
-        # Predicted velocity
-        predicted_velocity = self.model(
-            xt,
-            t,
-            condition
-        )
-
-        return F.mse_loss(
-            predicted_velocity,
-            target_velocity
-        )
-
-    @torch.no_grad()
-    def sample(
-        self,
-        condition,
-        image_size=256,
-        channels=1,
-        steps=50
-    ):
-
-        self.model.eval()
-
-        batch_size = condition.shape[0]
-
-        # Initial Gaussian noise
-        x = torch.randn(
-            batch_size,
-            channels,
-            image_size,
-            image_size,
-            device=self.device
-        )
-
-        dt = 1.0 / steps
-
-        # Euler ODE integration
-        for i in range(steps):
-
-            t = torch.full(
-                (batch_size,),
-                i / steps,
-                device=self.device
-            )
-
-            velocity = self.model(
-                x,
-                t,
-                condition
-            )
-
-            x = x + dt * velocity
-
-        return x
-
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-model = ConditionalUNet(
-    in_channels=1,
-    cond_channels=512,
-    base_channels=32,
-    time_dim=256
-).to(device)
-
-flow = ConditionalFlowMatching(
-    model,
-    device=device
-)
-
-optimizer = torch.optim.AdamW(
-    model.parameters(),
-    lr=1e-4,
-    weight_decay=1e-4
-)
