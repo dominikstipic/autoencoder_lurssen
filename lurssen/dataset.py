@@ -4,6 +4,8 @@ from datasets import load_dataset
 import cv2
 import matplotlib.pyplot as plt
 import torch
+from torch.utils.data import DataLoader
+import torch
 
 class RPlanDataset(Dataset):
     def __init__(self, split="train", return_graph=False, hf_name="metindeder/rplan-floorplan-edited"):
@@ -108,20 +110,63 @@ class RPlanDataset(Dataset):
         sizes = sizes.reshape(len(sizes), 1)
         neighboorhood = self._from_adj_to_neighboorhood(adj)  
         neighboorhood = torch.tensor(neighboorhood, dtype=torch.long).T.contiguous()        
-        sizes = torch.tensor(sizes, dtype=torch.float)        
-        return img.permute(2,0,1), house_mask, sizes, neighboorhood
+        sizes = torch.tensor(sizes, dtype=torch.float)    
+        img = img.permute(2,0,1).float()
+        return img, house_mask, sizes, neighboorhood
 
+
+def collate_fn(batch):
+    images = torch.stack([item[0] for item in batch])
+    house_masks = torch.stack([item[1] for item in batch])
+
+    sizes = [item[2] for item in batch]
+    edges = [item[3] for item in batch]
+
+    return images, house_masks, sizes, edges
+
+
+def get_dataloader(
+    split="train",
+    batch_size=16,
+    shuffle=True,
+    num_workers=4,
+    pin_memory=True,
+):
+
+    dataset = RPlanDataset(
+        split=split,
+        return_graph=True,
+        hf_name="metindeder/rplan-floorplan-edited"
+    )
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        collate_fn=collate_fn,
+        drop_last=(split == "train")
+    )
+
+    return dataloader
 
 if __name__ == "__main__":
     img, mask, sizes, neighboorhood = RPlanDataset()[-5]
     print(img.shape)
 
-    # fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    # ax[0].imshow(img)
-    # ax[0].axis("off")
+    dl = get_dataloader(batch_size=4)
 
-    # ax[1].imshow(mask)
-    # ax[1].axis("off")
+    for i, (images, house_masks, sizes, edges) in enumerate(dl):
+        print(f"\nBatch {i + 1}")
+        print("-" * 40)
 
-    # plt.tight_layout()
-    # plt.show()
+        print("Images:", images.shape)
+        print("House masks:", house_masks.shape)
+
+        for j in range(len(sizes)):
+            print(f"\nSample {j + 1}:")
+            print("  Room sizes:", sizes[j].shape)
+            print("  Edge index:", edges[j].shape)
+        if i == 0:
+            break

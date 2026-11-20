@@ -1,123 +1,55 @@
-import torch
+
+from .gcn import RoomGraphEncoder
+from .dataset import RPlanDataset
+from .outershell import ShipGeometryEncoder
+from .cross_attention import ImageGraphFusion
+from torch_geometric.data import Data
 import torch.nn as nn
-import torch.nn.functional as F
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
 
 
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+class RoomGenEncoder(nn.Module):
+    
+    def __init__(self):
         super().__init__()
+        self.gcn_model = RoomGraphEncoder(input_dim=1, hidden_dim=64, output_dim=128)
+        self.encoder = ShipGeometryEncoder(latent_dim=512)
+        self.fusion = ImageGraphFusion()
 
-        self.block = nn.Sequential(
-            nn.Conv2d(
-                in_channels,
-                out_channels,
-                kernel_size=3,
-                stride=2,
-                padding=1
-            ),
-            nn.GroupNorm(8, out_channels),
-            nn.GELU()
+    def forward(self, outershell_mask, node_features, edge_features):
+        graph = Data(
+            x=node_features,
+            edge_index=edge_features
         )
-
-    def forward(self, x):
-        return self.block(x)
-
-
-class ShipGeometryEncoder(nn.Module):
-
-    def __init__(self, latent_dim=512):
-        super().__init__()
-
-        self.features = nn.Sequential(
-            ConvBlock(1, 32),       # 256 -> 128
-            ConvBlock(32, 64),      # 128 -> 64
-            ConvBlock(64, 128),     # 64 -> 32
-            ConvBlock(128, 256),    # 32 -> 16
-            ConvBlock(256, 512)     # 16 -> 8
-        )
-
-        self.flatten = nn.Flatten()
-
-        self.fc = nn.Linear(
-            512 * 8 * 8,
-            latent_dim
-        )
-
-    def forward(self, x):
-
-        feature_map = self.features(x)
-
-        z = self.fc(
-            self.flatten(feature_map)
-        )
-
-        return z, feature_map
+        graph_features = self.gcn_model(graph.x, graph.edge_index)
+        _, outtershell_features = self.encoder(outershell_mask)
+        output = self.fusion(outtershell_features, graph_features)
+        return output
 
 
-class ShipGeometryDecoder(nn.Module):
+if __name__ == "__main__":
+    dataset = RPlanDataset()
+    encoder = RoomGenEncoder()
+    img, house_mask, room_sizes, neighboorhood_graph = dataset[1]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].imshow(img.permute(1,2,0), cmap="gray")
+    axes[0].set_title("Original Image")
+    axes[0].axis("off")
 
-    def __init__(self, latent_dim=512):
-        super().__init__()
+    axes[1].imshow(house_mask.squeeze(), cmap="gray")
+    axes[1].set_title("House Mask")
+    axes[1].axis("off")
 
-        self.fc = nn.Linear(
-            latent_dim,
-            512 * 8 * 8
-        )
+    plt.tight_layout()
+    plt.show()
 
-        self.decoder = nn.Sequential(
+    print(room_sizes)
+    print(neighboorhood_graph)
+    print(f"img features: {img.shape}")
+    print(f"house features: {house_mask.shape}")
+    print(f"sizes features: {room_sizes.shape}")
+    print(f"neighboorhood features: {neighboorhood_graph.shape}")
+    cond = encoder(house_mask.unsqueeze(0), room_sizes, neighboorhood_graph)
+    print(f"out features: {cond.shape}")
 
-            nn.ConvTranspose2d(
-                512, 256, 4, 2, 1
-            ),
-            nn.GroupNorm(8, 256),
-            nn.GELU(),
-
-            nn.ConvTranspose2d(
-                256, 128, 4, 2, 1
-            ),
-            nn.GroupNorm(8, 128),
-            nn.GELU(),
-
-            nn.ConvTranspose2d(
-                128, 64, 4, 2, 1
-            ),
-            nn.GroupNorm(8, 64),
-            nn.GELU(),
-
-            nn.ConvTranspose2d(
-                64, 32, 4, 2, 1
-            ),
-            nn.GroupNorm(8, 32),
-            nn.GELU(),
-
-            nn.ConvTranspose2d(
-                32, 1, 4, 2, 1
-            ),
-
-            nn.Sigmoid()
-        )
-
-    def forward(self, z):
-
-        x = self.fc(z)
-
-        x = x.view(-1, 512, 8, 8)
-
-        return self.decoder(x)
-
-
-class ShipGeometryAutoencoder(nn.Module):
-
-    def __init__(self, latent_dim=512):
-        super().__init__()
-
-        self.encoder = ShipGeometryEncoder(latent_dim)
-        self.decoder = ShipGeometryDecoder(latent_dim)
-
-    def forward(self, x):
-
-        z, feature_map = self.encoder(x)
-
-        reconstructed = self.decoder(z)
-
-        return reconstructed, z, feature_map
