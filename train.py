@@ -33,7 +33,8 @@ optimizer = torch.optim.AdamW(
 
 encoder = RoomGenEncoder()
 
-train_loader = get_dataloader(batch_size=1)
+train_loader = get_dataloader(num_samples=100, batch_size=1)
+print(len(train_loader))
 for epoch in range(epochs):
     model.train()
     total_loss = 0.0

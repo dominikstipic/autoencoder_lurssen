@@ -1,10 +1,9 @@
 import numpy as np
 from torch.utils.data import Dataset
+from torch.utils.data import Subset, DataLoader
 from datasets import load_dataset
 import cv2
 import matplotlib.pyplot as plt
-import torch
-from torch.utils.data import DataLoader
 import torch
 
 class RPlanDataset(Dataset):
@@ -126,27 +125,38 @@ def collate_fn(batch):
 
 
 def get_dataloader(
+    num_samples=100,
     split="train",
     batch_size=16,
     shuffle=True,
     num_workers=4,
     pin_memory=True,
+    seed=42
 ):
-
     dataset = RPlanDataset(
         split=split,
         return_graph=True,
         hf_name="metindeder/rplan-floorplan-edited"
     )
 
+    # Select 100 random samples reproducibly
+    generator = torch.Generator().manual_seed(seed)
+
+    indices = torch.randperm(
+        len(dataset),
+        generator=generator
+    )[:num_samples].tolist()
+
+    subset = Subset(dataset, indices)
+
     dataloader = DataLoader(
-        dataset,
+        subset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory,
         collate_fn=collate_fn,
-        drop_last=(split == "train")
+        drop_last=False
     )
 
     return dataloader
